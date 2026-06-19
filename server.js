@@ -71,6 +71,48 @@ app.get('/stats', async (req, res) => {
   const totalClicks = events.filter(e => e.event === 'click').length;
   const uniqueOpens = new Set(events.filter(e=>e.event==='open').map(e=>e.lead_id)).size;
 
+  // Version labels
+  const VERSION_LABELS = {
+    v1: 'V1 — Silent Leak',
+    v2: 'V2 — Competitor',
+    v3: 'V3 — Cost',
+    v4: 'V4 — Timeline',
+    v5: 'V5 — Personal Find',
+  };
+
+  // Aggregate by version (lead_id ends in -v1 … -v5)
+  const versions = {};
+  for (const e of events) {
+    const m = e.lead_id && e.lead_id.match(/-v(\d+)$/);
+    const vk = m ? `v${m[1]}` : 'other';
+    if (!versions[vk]) versions[vk] = { sent: new Set(), opens: 0, clicks: 0 };
+    versions[vk].sent.add(e.lead_id);
+    if (e.event === 'open')  versions[vk].opens++;
+    if (e.event === 'click') versions[vk].clicks++;
+  }
+
+  const versionRows = Object.entries(versions)
+    .sort((a,b) => a[0].localeCompare(b[0]))
+    .map(([vk, d]) => {
+      const sent     = d.sent.size;
+      const openRate = sent ? Math.round(d.opens / sent * 100) : 0;
+      const clickRate= sent ? Math.round(d.clicks / sent * 100) : 0;
+      const label    = VERSION_LABELS[vk] || vk;
+      const barW     = openRate;
+      return `<tr>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-weight:600;font-size:13px">${label}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:center;color:#64748b">${sent}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:center;color:${d.opens>0?'#16a34a':'#94a3b8'};font-weight:700">${d.opens}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:center;color:${d.clicks>0?'#6366f1':'#94a3b8'};font-weight:700">${d.clicks}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;min-width:120px">
+          <div style="background:#f1f5f9;border-radius:4px;height:8px;overflow:hidden">
+            <div style="background:#16a34a;height:8px;width:${barW}%;border-radius:4px"></div>
+          </div>
+          <span style="font-size:11px;color:#64748b">${openRate}% open · ${clickRate}% click</span>
+        </td>
+      </tr>`;
+    }).join('');
+
   res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -84,7 +126,7 @@ app.get('/stats', async (req, res) => {
   <span style="font-size:11px;color:#6366f1;text-transform:uppercase;letter-spacing:1.2px;font-weight:600">Email Tracker</span>
 </div>
 
-<div style="max-width:900px;margin:32px auto;padding:0 16px">
+<div style="max-width:960px;margin:32px auto;padding:0 16px">
 
   <!-- Summary cards -->
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px">
@@ -102,7 +144,27 @@ app.get('/stats', async (req, res) => {
     </div>
   </div>
 
-  <!-- Table -->
+  <!-- Version A/B table -->
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:28px">
+    <div style="padding:18px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:10px">
+      <h2 style="font-size:16px;font-weight:700">Performance by Version</h2>
+      <span style="font-size:12px;color:#94a3b8">— which subject line wins</span>
+    </div>
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <thead>
+        <tr style="background:#f8fafc">
+          <th style="padding:10px 14px;text-align:left;font-size:12px;font-weight:600;color:#64748b">Version</th>
+          <th style="padding:10px 14px;text-align:center;font-size:12px;font-weight:600;color:#64748b">Sent</th>
+          <th style="padding:10px 14px;text-align:center;font-size:12px;font-weight:600;color:#64748b">Opens</th>
+          <th style="padding:10px 14px;text-align:center;font-size:12px;font-weight:600;color:#64748b">Clicks</th>
+          <th style="padding:10px 14px;text-align:left;font-size:12px;font-weight:600;color:#64748b">Rate</th>
+        </tr>
+      </thead>
+      <tbody>${versionRows || '<tr><td colspan="5" style="padding:24px;text-align:center;color:#94a3b8">No data yet</td></tr>'}</tbody>
+    </table>
+  </div>
+
+  <!-- Per-lead table -->
   <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
     <div style="padding:18px 20px;border-bottom:1px solid #f1f5f9">
       <h2 style="font-size:16px;font-weight:700">Per-Lead Activity</h2>
