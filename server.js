@@ -63,8 +63,8 @@ app.get('/stats', async (req, res) => {
         <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-weight:600">${id}</td>
         <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:center;color:${d.opens>0?'#16a34a':'#94a3b8'};font-weight:700">${d.opens}</td>
         <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:center;color:${d.clicks>0?'#6366f1':'#94a3b8'};font-weight:700">${d.clicks}</td>
-        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#64748b">${d.lastOpen ? new Date(d.lastOpen).toLocaleString() : '—'}</td>
-        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#64748b">${d.lastClick ? new Date(d.lastClick).toLocaleString() : '—'}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#64748b"><span class="ts" data-ts="${d.lastOpen || ''}">${d.lastOpen || '—'}</span></td>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#64748b"><span class="ts" data-ts="${d.lastClick || ''}">${d.lastClick || '—'}</span></td>
       </tr>`).join('');
 
   const totalOpens  = events.filter(e => e.event === 'open').length;
@@ -125,7 +125,13 @@ app.get('/stats', async (req, res) => {
     Auto-refresh every 60s &nbsp;·&nbsp; <a href="/stats" style="color:#6366f1">Refresh now</a>
   </p>
 </div>
-<script>setTimeout(()=>location.reload(), 60000)</script>
+<script>
+  document.querySelectorAll('.ts').forEach(el => {
+    const ts = el.dataset.ts;
+    if (ts) el.textContent = new Date(ts).toLocaleString();
+  });
+  setTimeout(()=>location.reload(), 60000);
+</script>
 </body>
 </html>`);
 });
