@@ -36,8 +36,20 @@ app.get('/t/open/:id', (req, res) => {
 // ── Click redirect ────────────────────────────────────────────────────────────
 app.get('/t/click/:id', (req, res) => {
   const dest = req.query.url || 'https://leadengine.admexo.com';
-  log({ lead_id: req.params.id, event: 'click', dest });
+  const isCalendly = dest.includes('calendly.com');
+  log({ lead_id: req.params.id, event: isCalendly ? 'calendly' : 'click', dest });
   res.redirect(302, dest);
+});
+
+// ── Unsubscribe ───────────────────────────────────────────────────────────────
+app.get('/unsubscribe/:id', async (req, res) => {
+  const id = req.params.id;
+  await log({ lead_id: id, event: 'unsubscribe', ip: req.ip });
+  res.send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Unsubscribed</title></head>
+<body style="font-family:Arial,sans-serif;max-width:480px;margin:80px auto;text-align:center;color:#1e293b">
+  <h2 style="color:#16a34a">&#10003; You've been unsubscribed</h2>
+  <p style="color:#64748b;margin-top:12px">You won't receive any more emails from ADMEXO.<br>If this was a mistake, reply to the original email.</p>
+</body></html>`);
 });
 
 // ── Stats page ────────────────────────────────────────────────────────────────
@@ -67,9 +79,11 @@ app.get('/stats', async (req, res) => {
         <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#64748b"><span class="ts" data-ts="${d.lastClick || ''}">${d.lastClick || '—'}</span></td>
       </tr>`).join('');
 
-  const totalOpens  = events.filter(e => e.event === 'open').length;
-  const totalClicks = events.filter(e => e.event === 'click').length;
-  const uniqueOpens = new Set(events.filter(e=>e.event==='open').map(e=>e.lead_id)).size;
+  const totalOpens       = events.filter(e => e.event === 'open').length;
+  const totalClicks      = events.filter(e => e.event === 'click').length;
+  const totalCalendly    = events.filter(e => e.event === 'calendly').length;
+  const totalUnsub       = events.filter(e => e.event === 'unsubscribe').length;
+  const uniqueOpens      = new Set(events.filter(e=>e.event==='open').map(e=>e.lead_id)).size;
 
   // Version labels
   const VERSION_LABELS = {
@@ -129,18 +143,26 @@ app.get('/stats', async (req, res) => {
 <div style="max-width:960px;margin:32px auto;padding:0 16px">
 
   <!-- Summary cards -->
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px">
-    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px">
-      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;font-weight:600;margin-bottom:8px">Total Opens</div>
-      <div style="font-size:36px;font-weight:900;color:#16a34a">${totalOpens}</div>
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:32px">
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;font-weight:600;margin-bottom:8px">Total Opens</div>
+      <div style="font-size:32px;font-weight:900;color:#16a34a">${totalOpens}</div>
     </div>
-    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px">
-      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;font-weight:600;margin-bottom:8px">Unique Openers</div>
-      <div style="font-size:36px;font-weight:900;color:#0ea5e9">${uniqueOpens}</div>
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;font-weight:600;margin-bottom:8px">Unique Openers</div>
+      <div style="font-size:32px;font-weight:900;color:#0ea5e9">${uniqueOpens}</div>
     </div>
-    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:20px">
-      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;font-weight:600;margin-bottom:8px">Report Clicks</div>
-      <div style="font-size:36px;font-weight:900;color:#6366f1">${totalClicks}</div>
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;font-weight:600;margin-bottom:8px">Report Clicks</div>
+      <div style="font-size:32px;font-weight:900;color:#6366f1">${totalClicks}</div>
+    </div>
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;font-weight:600;margin-bottom:8px">Calendly Clicks</div>
+      <div style="font-size:32px;font-weight:900;color:#f59e0b">${totalCalendly}</div>
+    </div>
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;font-weight:600;margin-bottom:8px">Unsubscribed</div>
+      <div style="font-size:32px;font-weight:900;color:#ef4444">${totalUnsub}</div>
     </div>
   </div>
 
