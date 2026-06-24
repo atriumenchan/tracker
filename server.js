@@ -63,9 +63,10 @@ app.get('/stats', async (req, res) => {
   // Aggregate per lead
   const leads = {};
   for (const e of events) {
-    if (!leads[e.lead_id]) leads[e.lead_id] = { opens: 0, clicks: 0, lastOpen: null, lastClick: null };
-    if (e.event === 'open')  { leads[e.lead_id].opens++;  leads[e.lead_id].lastOpen  = e.created_at; }
-    if (e.event === 'click') { leads[e.lead_id].clicks++; leads[e.lead_id].lastClick = e.created_at; }
+    if (!leads[e.lead_id]) leads[e.lead_id] = { opens: 0, clicks: 0, calendly: 0, lastOpen: null, lastClick: null };
+    if (e.event === 'open')     { leads[e.lead_id].opens++;    leads[e.lead_id].lastOpen  = e.created_at; }
+    if (e.event === 'click')    { leads[e.lead_id].clicks++;   leads[e.lead_id].lastClick = e.created_at; }
+    if (e.event === 'calendly') { leads[e.lead_id].calendly++; leads[e.lead_id].lastClick = e.created_at; }
   }
 
   const rows = Object.entries(leads)
@@ -75,6 +76,7 @@ app.get('/stats', async (req, res) => {
         <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-weight:600">${id}</td>
         <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:center;color:${d.opens>0?'#16a34a':'#94a3b8'};font-weight:700">${d.opens}</td>
         <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:center;color:${d.clicks>0?'#6366f1':'#94a3b8'};font-weight:700">${d.clicks}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:center;color:${d.calendly>0?'#f59e0b':'#94a3b8'};font-weight:700">${d.calendly||0}</td>
         <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#64748b"><span class="ts" data-ts="${d.lastOpen || ''}">${d.lastOpen || '—'}</span></td>
         <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#64748b"><span class="ts" data-ts="${d.lastClick || ''}">${d.lastClick || '—'}</span></td>
       </tr>`).join('');
@@ -197,6 +199,7 @@ app.get('/stats', async (req, res) => {
           <th style="padding:10px 14px;text-align:left;font-size:12px;font-weight:600;color:#64748b">Lead</th>
           <th style="padding:10px 14px;text-align:center;font-size:12px;font-weight:600;color:#64748b">Opens</th>
           <th style="padding:10px 14px;text-align:center;font-size:12px;font-weight:600;color:#64748b">Clicks</th>
+          <th style="padding:10px 14px;text-align:center;font-size:12px;font-weight:600;color:#64748b">Calendly</th>
           <th style="padding:10px 14px;text-align:left;font-size:12px;font-weight:600;color:#64748b">Last Open</th>
           <th style="padding:10px 14px;text-align:left;font-size:12px;font-weight:600;color:#64748b">Last Click</th>
         </tr>
