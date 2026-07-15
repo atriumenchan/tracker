@@ -36,7 +36,7 @@ app.get('/t/open/:id', (req, res) => {
 // ── Click redirect ────────────────────────────────────────────────────────────
 app.get('/t/click/:id', (req, res) => {
   const dest = req.query.url || 'https://leadengine.admexo.com';
-  const isCalendly = dest.includes('calendly.com');
+  const isCalendly = dest.includes('calendly.com') || dest.includes('tidycal.com');
   log({ lead_id: req.params.id, event: isCalendly ? 'calendly' : 'click', dest });
   res.redirect(302, dest);
 });
@@ -60,6 +60,14 @@ app.get('/stats', async (req, res) => {
     .order('created_at', { ascending: false })
     .limit(5000);
 
+  // Extract batch tag and business name from lead_id
+  // Formats: "b4-business-name-v1" or "business-name-v1" (older)
+  function parseLeadId(id) {
+    const m = id && id.match(/^(b\d+)?-?(.+)-v(\d+)$/);
+    if (m) return { batch: m[1] || 'older', name: m[2].replace(/-/g, ' '), version: 'v' + m[3] };
+    return { batch: 'older', name: id || '?', version: '?' };
+  }
+
   // Aggregate per lead
   const leads = {};
   for (const e of events) {
@@ -69,17 +77,56 @@ app.get('/stats', async (req, res) => {
     if (e.event === 'calendly') { leads[e.lead_id].calendly++; leads[e.lead_id].lastClick = e.created_at; }
   }
 
+  // Aggregate per batch
+  const batches = {};
+  for (const e of events) {
+    const info = parseLeadId(e.lead_id);
+    const bk = info.batch;
+    if (!batches[bk]) batches[bk] = { sent: new Set(), opens: 0, clicks: 0, calendly: 0, opens_unique: new Set() };
+    batches[bk].sent.add(e.lead_id);
+    if (e.event === 'open')     { batches[bk].opens++;  batches[bk].opens_unique.add(e.lead_id); }
+    if (e.event === 'click')    batches[bk].clicks++;
+    if (e.event === 'calendly') batches[bk].calendly++;
+  }
+
+  const BATCH_LABELS = { b1: 'Batch 1', b2: 'Batch 2', b3: 'Batch 3', b4: 'Batch 4 (Houston+Dallas+Austin)', older: 'Pre-batch' };
+
+  const batchRows = Object.entries(batches)
+    .sort((a,b) => (a[0] === 'older' ? 1 : b[0] === 'older' ? -1 : a[0].localeCompare(b[0])))
+    .map(([bk, d]) => {
+      const sent = d.sent.size;
+      const openRate = sent ? Math.round(d.opens_unique.size / sent * 100) : 0;
+      const label = BATCH_LABELS[bk] || bk;
+      return `<tr>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-weight:600;font-size:13px">${label}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:center;color:#64748b">${sent}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:center;color:${d.opens>0?'#16a34a':'#94a3b8'};font-weight:700">${d.opens}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:center;color:${d.clicks>0?'#6366f1':'#94a3b8'};font-weight:700">${d.clicks}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:center;color:${d.calendly>0?'#f59e0b':'#94a3b8'};font-weight:700">${d.calendly}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;min-width:100px">
+          <div style="background:#f1f5f9;border-radius:4px;height:8px;overflow:hidden">
+            <div style="background:#16a34a;height:8px;width:${openRate}%;border-radius:4px"></div>
+          </div>
+          <span style="font-size:11px;color:#64748b">${openRate}% open</span>
+        </td>
+      </tr>`;
+    }).join('');
+
   const rows = Object.entries(leads)
     .sort((a, b) => (b[1].opens + b[1].clicks) - (a[1].opens + a[1].clicks))
-    .map(([id, d]) => `
+    .map(([id, d]) => {
+      const info = parseLeadId(id);
+      const displayName = info.name.replace(/\b\w/g, c => c.toUpperCase());
+      return `
       <tr>
-        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-weight:600">${id}</td>
+        <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-weight:600;font-size:13px">${displayName}<br><span style="font-size:11px;color:#94a3b8;font-weight:400">${info.batch} · ${info.version}</span></td>
         <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:center;color:${d.opens>0?'#16a34a':'#94a3b8'};font-weight:700">${d.opens}</td>
         <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:center;color:${d.clicks>0?'#6366f1':'#94a3b8'};font-weight:700">${d.clicks}</td>
         <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;text-align:center;color:${d.calendly>0?'#f59e0b':'#94a3b8'};font-weight:700">${d.calendly||0}</td>
         <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#64748b"><span class="ts" data-ts="${d.lastOpen || ''}">${d.lastOpen || '—'}</span></td>
         <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#64748b"><span class="ts" data-ts="${d.lastClick || ''}">${d.lastClick || '—'}</span></td>
-      </tr>`).join('');
+      </tr>`;
+    }).join('');
 
   const totalOpens       = events.filter(e => e.event === 'open').length;
   const totalClicks      = events.filter(e => e.event === 'click').length;
@@ -168,6 +215,27 @@ app.get('/stats', async (req, res) => {
     </div>
   </div>
 
+  <!-- Batch summary table -->
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:28px">
+    <div style="padding:18px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:10px">
+      <h2 style="font-size:16px;font-weight:700">Performance by Batch</h2>
+      <span style="font-size:12px;color:#94a3b8">— sent / opens / clicks / bookings</span>
+    </div>
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <thead>
+        <tr style="background:#f8fafc">
+          <th style="padding:10px 14px;text-align:left;font-size:12px;font-weight:600;color:#64748b">Batch</th>
+          <th style="padding:10px 14px;text-align:center;font-size:12px;font-weight:600;color:#64748b">Sent</th>
+          <th style="padding:10px 14px;text-align:center;font-size:12px;font-weight:600;color:#64748b">Opens</th>
+          <th style="padding:10px 14px;text-align:center;font-size:12px;font-weight:600;color:#64748b">Clicks</th>
+          <th style="padding:10px 14px;text-align:center;font-size:12px;font-weight:600;color:#64748b">Bookings</th>
+          <th style="padding:10px 14px;text-align:left;font-size:12px;font-weight:600;color:#64748b">Open Rate</th>
+        </tr>
+      </thead>
+      <tbody>${batchRows || '<tr><td colspan="6" style="padding:24px;text-align:center;color:#94a3b8">No data yet</td></tr>'}</tbody>
+    </table>
+  </div>
+
   <!-- Version A/B table -->
   <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin-bottom:28px">
     <div style="padding:18px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:10px">
@@ -192,6 +260,7 @@ app.get('/stats', async (req, res) => {
   <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
     <div style="padding:18px 20px;border-bottom:1px solid #f1f5f9">
       <h2 style="font-size:16px;font-weight:700">Per-Lead Activity</h2>
+      <span style="font-size:12px;color:#94a3b8">— individual opens, clicks and bookings</span>
     </div>
     <table width="100%" cellpadding="0" cellspacing="0">
       <thead>
@@ -204,7 +273,7 @@ app.get('/stats', async (req, res) => {
           <th style="padding:10px 14px;text-align:left;font-size:12px;font-weight:600;color:#64748b">Last Click</th>
         </tr>
       </thead>
-      <tbody>${rows || '<tr><td colspan="5" style="padding:24px;text-align:center;color:#94a3b8">No events yet</td></tr>'}</tbody>
+      <tbody>${rows || '<tr><td colspan="6" style="padding:24px;text-align:center;color:#94a3b8">No events yet</td></tr>'}</tbody>
     </table>
   </div>
 
