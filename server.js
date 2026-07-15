@@ -54,11 +54,15 @@ app.get('/unsubscribe/:id', async (req, res) => {
 
 // ── Stats page ────────────────────────────────────────────────────────────────
 app.get('/stats', async (req, res) => {
-  const { data: events = [] } = await supabase
-    .from('email_events')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(5000);
+  try {
+    const { data: events, error } = await supabase
+      .from('email_events')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(5000);
+
+    if (error) throw error;
+    const evts = events || [];
 
   // Extract batch tag and business name from lead_id
   // Formats: "b4-business-name-v1" or "business-name-v1" (older)
@@ -70,7 +74,7 @@ app.get('/stats', async (req, res) => {
 
   // Aggregate per lead
   const leads = {};
-  for (const e of events) {
+  for (const e of evts) {
     if (!leads[e.lead_id]) leads[e.lead_id] = { opens: 0, clicks: 0, calendly: 0, lastOpen: null, lastClick: null };
     if (e.event === 'open')     { leads[e.lead_id].opens++;    leads[e.lead_id].lastOpen  = e.created_at; }
     if (e.event === 'click')    { leads[e.lead_id].clicks++;   leads[e.lead_id].lastClick = e.created_at; }
@@ -79,7 +83,7 @@ app.get('/stats', async (req, res) => {
 
   // Aggregate per batch
   const batches = {};
-  for (const e of events) {
+  for (const e of evts) {
     const info = parseLeadId(e.lead_id);
     const bk = info.batch;
     if (!batches[bk]) batches[bk] = { sent: new Set(), opens: 0, clicks: 0, calendly: 0, opens_unique: new Set() };
@@ -128,11 +132,11 @@ app.get('/stats', async (req, res) => {
       </tr>`;
     }).join('');
 
-  const totalOpens       = events.filter(e => e.event === 'open').length;
-  const totalClicks      = events.filter(e => e.event === 'click').length;
-  const totalCalendly    = events.filter(e => e.event === 'calendly').length;
-  const totalUnsub       = events.filter(e => e.event === 'unsubscribe').length;
-  const uniqueOpens      = new Set(events.filter(e=>e.event==='open').map(e=>e.lead_id)).size;
+  const totalOpens       = evts.filter(e => e.event === 'open').length;
+  const totalClicks      = evts.filter(e => e.event === 'click').length;
+  const totalCalendly    = evts.filter(e => e.event === 'calendly').length;
+  const totalUnsub       = evts.filter(e => e.event === 'unsubscribe').length;
+  const uniqueOpens      = new Set(evts.filter(e=>e.event==='open').map(e=>e.lead_id)).size;
 
   // Version labels
   const VERSION_LABELS = {
@@ -145,7 +149,7 @@ app.get('/stats', async (req, res) => {
 
   // Aggregate by version (lead_id ends in -v1 … -v5)
   const versions = {};
-  for (const e of events) {
+  for (const e of evts) {
     const m = e.lead_id && e.lead_id.match(/-v(\d+)$/);
     const vk = m ? `v${m[1]}` : 'other';
     if (!versions[vk]) versions[vk] = { sent: new Set(), opens: 0, clicks: 0 };
@@ -290,6 +294,10 @@ app.get('/stats', async (req, res) => {
 </script>
 </body>
 </html>`);
+  } catch (err) {
+    console.error('Stats error:', err);
+    res.status(500).send(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:Arial,sans-serif;max-width:600px;margin:80px auto;text-align:center;color:#1e293b"><h2 style="color:#ef4444">Tracker Error</h2><p style="color:#64748b;margin-top:12px">Could not load stats. Check if Supabase env vars are set on Render.</p><p style="font-size:12px;color:#94a3b8;margin-top:16px">${err.message || err}</p><p style="margin-top:20px"><a href="/stats" style="color:#6366f1">Retry</a></p></body></html>`);
+  }
 });
 
 app.get('/', (req, res) => res.redirect('/stats'));
